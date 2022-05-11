@@ -10,14 +10,14 @@ import (
 
 type Queue interface {
 	Publish(ctx context.Context, subject string, payload any) error
-	Subscribe(ctx context.Context, subject string, handler Handler) error
+	Subscribe(ctx context.Context, subject, queue string, handler Handler) error
 	Request(ctx context.Context, subject string, payload any) (any, error)
 	Close() error
 	Start()
 }
 
 type NatQueue struct {
-	jsonPub   *nats.EncodedConn
+	natCon    *nats.EncodedConn
 	closeChan chan struct{}
 }
 
@@ -30,69 +30,79 @@ func (n *NatQueue) Start() {
 
 // Close implements Queue
 func (n *NatQueue) Close() error {
-	err := n.jsonPub.Drain()
+	err := n.natCon.Drain()
 	if err != nil {
 		return err
 	}
-	n.jsonPub.Close()
+	n.natCon.Close()
 	n.closeChan <- struct{}{}
 	return nil
 }
 
 // Publish implements Queue
 func (n *NatQueue) Publish(ctx context.Context, subject string, payload any) error {
-	err := n.jsonPub.Publish(subject, payload)
+	err := n.natCon.Publish(subject, payload)
 	if err != nil {
 		return fmt.Errorf("publish subject:%s error: %s", subject, err.Error())
 	}
 	return nil
 }
 
-// Request implements Queue
-func (n *NatQueue) Request(ctx context.Context, subject string, payload any) (any, error) {
-	result := new(any)
-	err := n.jsonPub.RequestWithContext(ctx, subject, payload, result)
+func (n *NatQueue) Request(ctx context.Context, subject string, payload any) (response any, err error) {
+	err = n.natCon.RequestWithContext(ctx, subject, payload, &response)
 	if err != nil {
-		return nil, fmt.Errorf("request subject:%s - error: %s", subject, err.Error())
+		return nil, fmt.Errorf("request subject:%s error: %s", subject, err.Error())
 	}
-	return result, nil
+	return
 }
 
-func RequestType[T, V any](Queue Queue, ctx context.Context, subject string, payload any) (*V, error) {
-	result, err := Queue.Request(ctx, subject, payload)
-	var v V
+func Request[T, V any](ctx context.Context, queue Queue, subject string, req T) (*V, error) {
+	res, err := queue.Request(ctx, subject, req)
 	if err != nil {
-		return &v, err
+		return nil, err
 	}
-	return result.(*V), nil
+	v, ok := res.(V)
+	if !ok {
+		return nil, fmt.Errorf("request subject:%s error: %s", subject, "invalid response")
+	}
+	return &v, nil
 }
 
-// Subscribes implements Queue
-func (n *NatQueue) Subscribe(ctx context.Context, subject string, handler Handler) error {
-	_, err := n.jsonPub.QueueSubscribe(subject, "worker", func(subject, reply string, o any) {
+func (n *NatQueue) Subscribe(ctx context.Context, subject, queue string, handler Handler) error {
+	errMsg := "subscribe subject:%s error: %s"
+	err := isValidHandler(handler)
+	if err != nil {
+		return fmt.Errorf(errMsg, subject, err.Error())
+	}
+	_, err = n.natCon.QueueSubscribe(subject, queue, func(subject, reply string, o any) {
 		result, err := callHandler(handler, ctx, o)
 		if err != nil {
-			log.Err(err).Msgf("handler subject:%s error: %s", subject, err.Error())
-		} else {
-			err := n.Publish(ctx, reply, result)
-			if err != nil {
-				log.Err(err).Msgf("publish reply subject:%s, reply:%s error: %s", reply, reply, err.Error())
+			errReply := n.natCon.Publish(reply, err.Error())
+			if errReply != nil {
+				log.Error().Msgf(errMsg, subject, errReply.Error())
+			}
+		}
+		if reply != "" {
+			errReply := n.natCon.Publish(reply, result)
+			if errReply != nil {
+				log.Error().Msgf(errMsg, subject, errReply.Error())
 			}
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("subscribe subject:%s error: %s", subject, err.Error())
+		return fmt.Errorf(errMsg, subject, err.Error())
 	}
-	return n.jsonPub.Flush()
+	return n.natCon.Flush()
 }
 
-func NewNatQueue(natCon *nats.Conn) (Queue, error) {
-	jsonPub, err := nats.NewEncodedConn(natCon, nats.JSON_ENCODER)
+func NewNatQueue(conn *nats.Conn) (Queue, error) {
+	enc, err := nats.NewEncodedConn(conn, nats.JSON_ENCODER)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new encoded conn error: %s", err.Error())
 	}
+
 	return &NatQueue{
-		jsonPub:   jsonPub,
+		natCon:    enc,
 		closeChan: make(chan struct{}),
 	}, nil
 }

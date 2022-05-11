@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/nats-io/gnatsd/server"
 	"github.com/nats-io/nats.go"
@@ -58,18 +59,19 @@ func dosomething(ctx context.Context, userId string) (string, error) {
 }
 
 func (s *QueueTestSuite) TestPublish() {
-	err := s.natQueue.Subscribe(context.Background(), "test", dosomething)
+	err := s.natQueue.Subscribe(context.Background(), "test", "worker", dosomething)
 	require.Nil(s.T(), err)
 
 	err = s.natQueue.Publish(context.Background(), "test", "test")
+	time.Sleep(3 * time.Second)
 	require.Nil(s.T(), err)
 }
 
 func (s *QueueTestSuite) TestRequest() {
-	err := s.natQueue.Subscribe(context.Background(), "test", dosomething)
+	err := s.natQueue.Subscribe(context.Background(), "test", "test001", dosomething)
 	require.Nil(s.T(), err)
 
-	res, err := RequestType[string, *string](s.natQueue, context.Background(), "test", "test")
+	res, err := Request[string, string](context.Background(), s.natQueue, "test", "test")
 	require.Nil(s.T(), err)
 	require.Equal(s.T(), "test", *res)
 }

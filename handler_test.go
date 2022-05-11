@@ -44,3 +44,29 @@ func Test_callFunc(t *testing.T) {
 	require.Nil(t, resultTypeValues)
 	require.Equal(t, "test error", err.Error())
 }
+
+func Test_isValidHandler(t *testing.T) {
+	dummyHandlerStringResultFunc := func(ctx context.Context, userId string) (string, error) {
+		return userId, nil
+	}
+	err := isValidHandler(dummyHandlerStringResultFunc)
+	require.Nil(t, err)
+	dummyNoArgFunc := func(ctx context.Context) error {
+		return nil
+	}
+	require.Nil(t, isValidHandler(dummyNoArgFunc))
+
+	dummyNoCtxFunc := func() error {
+		return nil
+	}
+	require.NotNil(t, isValidHandler(dummyNoCtxFunc))
+
+	dummyNoReturnFunc := func(ctx context.Context) {
+	}
+	require.NotNil(t, isValidHandler(dummyNoReturnFunc))
+
+	dummyNoCtxArgsReturnFunc := func(userId string) string {
+		return userId
+	}
+	require.NotNil(t, isValidHandler(dummyNoCtxArgsReturnFunc))
+}
