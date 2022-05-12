@@ -3,10 +3,8 @@ package faasv
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 
-	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,41 +93,4 @@ func Test_isValidHandler(t *testing.T) {
 		return userId
 	}
 	require.NotNil(t, isValidHandler(dummyNoCtxArgsReturnFunc))
-}
-
-type YourT2 struct{}
-
-func (y YourT2) MethodFoo(u user) string {
-	//do something
-	return u.Name
-}
-
-func example() {
-	value := map[string]interface{}{
-		"Name": "test",
-	}
-
-	method := reflect.ValueOf(YourT2{}).MethodByName("MethodFoo")
-	methodInType := method.Type().In(0)
-	inputNew := reflect.New(methodInType).Elem().Interface()
-	err := mapstructure.Decode(value, &inputNew)
-	if err != nil {
-		panic(err)
-	}
-	method.Call([]reflect.Value{reflect.ValueOf(inputNew)})
-}
-
-func Test_example(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{
-			name: "test001",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			example()
-		})
-	}
 }

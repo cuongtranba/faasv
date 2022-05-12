@@ -51,5 +51,5 @@ func TestRequestServer(t *testing.T) {
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	require.Nil(t, err)
-	require.Equal(t, "test", string(body))
+	require.Equal(t, "{\"payload\":\"test\",\"error\":\"\"}\n", string(body))
 }
