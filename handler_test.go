@@ -3,14 +3,16 @@ package faasv
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/require"
 )
 
 type dummyStruct struct {
-	Name string
-	Age  int
+	Name string `json:"name"`
+	Age  int    `json:"age"`
 }
 
 type dummyStructResult struct {
@@ -18,6 +20,16 @@ type dummyStructResult struct {
 }
 
 func Test_callFunc(t *testing.T) {
+
+	result, err := callHandler(func(ctx context.Context, in dummyStruct) (string, error) {
+		return in.Name, nil
+	}, context.TODO(), map[string]interface{}{
+		"Name": "test",
+	})
+
+	require.Nil(t, err)
+	require.Equal(t, "test", result)
+
 	dummyHandlerStringResult := func(ctx context.Context, userId string) (string, error) {
 		return userId, nil
 	}
@@ -39,10 +51,18 @@ func Test_callFunc(t *testing.T) {
 		return "", fmt.Errorf("test error")
 	}
 
-	resultTypeValues, err = callHandler(dummyHandlerWithErrorReturn, context.TODO())
+	resultTypeValues, err = callHandler(dummyHandlerWithErrorReturn, context.TODO(), nil)
 	require.NotNil(t, err)
 	require.Nil(t, resultTypeValues)
 	require.Equal(t, "test error", err.Error())
+}
+
+type userType struct {
+	Name string
+}
+
+type result struct {
+	Name string
 }
 
 func Test_isValidHandler(t *testing.T) {
@@ -55,6 +75,12 @@ func Test_isValidHandler(t *testing.T) {
 		return nil
 	}
 	require.Nil(t, isValidHandler(dummyNoArgFunc))
+
+	require.Nil(t, isValidHandler(func(ctx context.Context, user userType) (*result, error) {
+		return &result{
+			Name: user.Name,
+		}, nil
+	}))
 
 	dummyNoCtxFunc := func() error {
 		return nil
@@ -69,4 +95,41 @@ func Test_isValidHandler(t *testing.T) {
 		return userId
 	}
 	require.NotNil(t, isValidHandler(dummyNoCtxArgsReturnFunc))
+}
+
+type YourT2 struct{}
+
+func (y YourT2) MethodFoo(u user) string {
+	//do something
+	return u.Name
+}
+
+func example() {
+	value := map[string]interface{}{
+		"Name": "test",
+	}
+
+	method := reflect.ValueOf(YourT2{}).MethodByName("MethodFoo")
+	methodInType := method.Type().In(0)
+	inputNew := reflect.New(methodInType).Elem().Interface()
+	err := mapstructure.Decode(value, &inputNew)
+	if err != nil {
+		panic(err)
+	}
+	method.Call([]reflect.Value{reflect.ValueOf(inputNew)})
+}
+
+func Test_example(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "test001",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			example()
+		})
+	}
 }

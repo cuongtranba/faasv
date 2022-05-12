@@ -6,12 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/gnatsd/server"
+	"github.com/cuongtranba/faasv/natserver_test"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	natsserver "github.com/nats-io/nats-server/test"
 )
 
 const TEST_PORT = 8369
@@ -21,18 +19,8 @@ type QueueTestSuite struct {
 	natQueue Queue
 }
 
-func RunServerWithOptions(opts *server.Options) *server.Server {
-	return natsserver.RunServer(opts)
-}
-
-func RunNATsServerOnPort(port int) *server.Server {
-	opts := natsserver.DefaultTestOptions
-	opts.Port = port
-	return RunServerWithOptions(&opts)
-}
-
 func TestQueueTestSuite(t *testing.T) {
-	natServer := RunNATsServerOnPort(TEST_PORT)
+	natServer := natserver_test.RunNATsServerOnPort(TEST_PORT)
 	defer natServer.Shutdown()
 
 	sUrl := fmt.Sprintf("nats://127.0.0.1:%d", TEST_PORT)

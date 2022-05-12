@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 var (
@@ -22,6 +24,10 @@ var (
 // arg any
 type Handler any
 
+// isValidHandler check handler should match the following:
+// func(ctx.context, args...) (any, error)
+// func(ctx.context) (error)
+// arg any
 func isValidHandler(handler interface{}) error {
 	cbType := reflect.TypeOf(handler)
 	if cbType.Kind() != reflect.Func {
@@ -53,19 +59,6 @@ func isValidHandler(handler interface{}) error {
 	return nil
 }
 
-func getArgs(handler Handler) []reflect.Value {
-	method := reflect.ValueOf(handler)
-	in := make([]reflect.Value, method.Type().NumIn())
-	objects := make(map[reflect.Type]interface{})
-
-	for i := 0; i < method.Type().NumIn(); i++ {
-		t := method.Type().In(i)
-		object := objects[t]
-		in[i] = reflect.ValueOf(object)
-	}
-	return in
-}
-
 func callHandlerWithByteArgs(handler Handler, ctx context.Context, args []byte) (any, error) {
 	err := isValidHandler(handler)
 	if err != nil {
@@ -79,21 +72,40 @@ func callHandlerWithByteArgs(handler Handler, ctx context.Context, args []byte) 
 	return callHandler(handler, ctx, paramsArgs)
 }
 
-func callHandler(handler Handler, args ...interface{}) (any, error) {
-	err := isValidHandler(handler)
-	if err != nil {
-		return nil, err
+func getArgs(handler Handler) []reflect.Value {
+	method := reflect.ValueOf(handler)
+	in := make([]reflect.Value, method.Type().NumIn())
+	objects := make(map[reflect.Type]interface{})
+
+	for i := 0; i < method.Type().NumIn(); i++ {
+		t := method.Type().In(i)
+		object := objects[t]
+		in[i] = reflect.ValueOf(object)
 	}
-	inputs := make([]reflect.Value, len(args))
-	for i, _ := range args {
-		inputs[i] = reflect.ValueOf(args[i])
+	return in
+}
+
+type user struct {
+	Name string `json:"name"`
+}
+
+func callHandler(handler Handler, ctx context.Context, arg any) (any, error) {
+	method := reflect.ValueOf(handler)
+	inputs := []reflect.Value{
+		reflect.ValueOf(ctx),
 	}
 
-	method := reflect.ValueOf(handler)
-	response := method.Call(inputs)
-	if len(response) == 0 {
-		return nil, errors.New("faasv Handler needs to be a func with an error return type")
+	if arg != nil {
+		methodInType := method.Type().In(1)
+		inputNew := reflect.New(methodInType).Elem().Interface()
+		err := mapstructure.Decode(arg, &inputNew)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, reflect.ValueOf(inputNew))
 	}
+
+	response := method.Call(inputs)
 	resultValue := response[0]
 	errorValue := response[1]
 	if errorValue.Interface() != nil {
