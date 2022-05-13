@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -90,6 +92,11 @@ type user struct {
 }
 
 func callHandler(handler Handler, ctx context.Context, arg any) (any, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Logger.Err(fmt.Errorf(fmt.Sprintf("panic: %v", r))).Caller(1).Msg("panic")
+		}
+	}()
 	method := reflect.ValueOf(handler)
 	inputs := []reflect.Value{
 		reflect.ValueOf(ctx),

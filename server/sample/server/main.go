@@ -11,7 +11,7 @@ import (
 
 	"github.com/cuongtranba/faasv"
 	"github.com/cuongtranba/faasv/natserver_test"
-	gateway "github.com/cuongtranba/faasv/server/gateway"
+	"github.com/cuongtranba/faasv/server"
 	"github.com/nats-io/nats.go"
 )
 
@@ -40,13 +40,11 @@ func main() {
 		natqueue.Start()
 	}()
 	ctx := context.Background()
-	err = natqueue.Subscribe(context.Background(), "user.test", "worker", func(ctx context.Context, query userRequest) (string, error) {
+	natqueue.Subscribe(context.Background(), "user.test", "worker", func(ctx context.Context, query userRequest) (string, error) {
 		return query.Query, nil
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	srv := gateway.NewGatewayServer(ctx, natqueue, ":8001")
+
+	srv := server.NewGatewayServer(ctx, natqueue, ":8001")
 	stopCh := make(chan os.Signal, 1)
 	signal.Notify(stopCh, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
