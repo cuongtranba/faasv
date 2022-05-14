@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -43,6 +44,14 @@ func TestGatewayTestSuite(t *testing.T) {
 	defer canfunc()
 	srv := NewGatewayServer(ctx, natqueue, ":9001")
 	defer srv.Stop(30 * time.Second)
+
+	srv.AddMiddleware(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("middleware")
+			h.ServeHTTP(w, r)
+		})
+	})
+
 	go func() {
 		srv.Start()
 	}()
@@ -63,7 +72,6 @@ func (g *GatewayServerTestSuite) Test_Should_Call_Success_Http_NatHandler() {
 		Payload: "test",
 	})
 	require.Nil(g.T(), err)
-	time.Sleep(3 * time.Second)
 	require.Equal(g.T(), "test", res.Payload.(string))
 }
 
