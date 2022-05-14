@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -44,6 +45,10 @@ func (server *GatewayServer) handleWebsocket(w http.ResponseWriter, r *http.Requ
 
 		for {
 			msg, op, err := wsutil.ReadClientData(conn)
+			if err != nil && err == io.EOF {
+				log.Warn().Msgf("Websocket connection closed by client, err: %s", err.Error())
+				break
+			}
 			if err != nil {
 				log.Err(err).Msg("Failed to read client data")
 				continue
@@ -54,7 +59,7 @@ func (server *GatewayServer) handleWebsocket(w http.ResponseWriter, r *http.Requ
 				continue
 			}
 			log.Info().Msgf("Received request %s", req.Subject)
-			res, err := server.queue.Request(r.Context(), req.Subject, req.Payload)
+			res, err := server.queue.Request(server.ctx, req.Subject, req.Payload)
 			if err != nil {
 				log.Err(err).Msgf("Failed to process request %s", r.URL.Path)
 				continue

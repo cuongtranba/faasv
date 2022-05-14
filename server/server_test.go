@@ -36,7 +36,10 @@ func TestGatewayTestSuite(t *testing.T) {
 	go func() {
 		natqueue.Start()
 	}()
-	ctx, canfunc := context.WithCancel(context.Background())
+
+	ctx := context.WithValue(context.Background(), "hello", "test001")
+	ctx, canfunc := context.WithTimeout(ctx, time.Second*9999999)
+
 	defer canfunc()
 	srv := NewGatewayServer(ctx, natqueue, ":9001")
 	defer srv.Stop(30 * time.Second)
@@ -75,7 +78,13 @@ func (g *GatewayServerTestSuite) Test_Should_Call_Success_Socket_NatHandler() {
 		Payload: "test",
 	})
 	require.Nil(g.T(), err)
-	time.Sleep(3 * time.Second)
-
 	require.Equal(g.T(), "test", res.Payload.(string))
+
+	res, err = request.WS[Request, Response]("ws://localhost:9001/ws", Request{
+		Subject: "test",
+		Payload: "test1",
+	})
+
+	require.Nil(g.T(), err)
+	require.Equal(g.T(), "test1", res.Payload.(string))
 }
