@@ -31,18 +31,18 @@ func TestGatewayTestSuite(t *testing.T) {
 	nc, err := nats.Connect(sUrl, nil)
 	require.Nil(t, err)
 	defer nc.Close()
-	natqueue, err := faasv.NewNatQueue(nc)
+	natQueue, err := faasv.NewNatQueue(nc)
 	require.Nil(t, err)
-	defer natqueue.Close()
+	defer natQueue.Close()
 	go func() {
-		natqueue.Start()
+		natQueue.Start()
 	}()
 
 	ctx := context.WithValue(context.Background(), "hello", "test001")
 	ctx, canfunc := context.WithTimeout(ctx, time.Second*9999999)
 
 	defer canfunc()
-	srv := NewGatewayServer(ctx, natqueue, ":9001")
+	srv := NewGatewayServer(WithContext(ctx), WithQueue(natQueue), WithPort(":9001"))
 	defer srv.Stop(30 * time.Second)
 
 	srv.AddMiddleware(func(h http.Handler) http.Handler {
@@ -56,7 +56,7 @@ func TestGatewayTestSuite(t *testing.T) {
 		srv.Start()
 	}()
 	suite.Run(t, &GatewayServerTestSuite{
-		natQueue: natqueue,
+		natQueue: natQueue,
 		srv:      srv,
 	})
 }

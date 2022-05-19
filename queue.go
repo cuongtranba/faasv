@@ -10,7 +10,7 @@ import (
 
 type Queue interface {
 	Publish(ctx context.Context, subject string, payload any) error
-	Subscribe(ctx context.Context, subject, queue string, handler Handler) error
+	Subscribe(ctx context.Context, handler Handler) error
 	Request(ctx context.Context, subject string, payload any) (any, error)
 	Close() error
 	Start()
@@ -68,14 +68,10 @@ func Request[T, V any](ctx context.Context, queue Queue, subject string, req T) 
 	return &v, nil
 }
 
-func (n *NatQueue) Subscribe(ctx context.Context, subject, queue string, handler Handler) error {
+func (n *NatQueue) Subscribe(ctx context.Context, handler Handler) error {
 	errMsg := "subscribe subject:%s error: %s"
-	err := isValidHandler(handler)
-	if err != nil {
-		return fmt.Errorf(errMsg, subject, err.Error())
-	}
-	_, err = n.natCon.QueueSubscribe(subject, queue, func(subject, reply string, o any) {
-		result, err := callHandler(handler, ctx, o)
+	_, err := n.natCon.QueueSubscribe(handler.Subject(), handler.Queue(), func(subject, reply string, o any) {
+		result, err := handler.Handler()(ctx, o)
 		if err != nil {
 			errReply := n.natCon.Publish(reply, err.Error())
 			if errReply != nil {
@@ -90,7 +86,7 @@ func (n *NatQueue) Subscribe(ctx context.Context, subject, queue string, handler
 		}
 	})
 	if err != nil {
-		return fmt.Errorf(errMsg, subject, err.Error())
+		return fmt.Errorf(errMsg, handler.Subject(), err.Error())
 	}
 	return n.natCon.Flush()
 }

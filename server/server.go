@@ -15,11 +15,42 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type GatewayServer struct {
+type ServerOptions struct {
 	queue      faasv.Queue
-	httpServer *http.Server
+	addr       string
 	ctx        context.Context
 	middleware []func(http.Handler) http.Handler
+	httpServer *http.Server
+}
+
+type ServerOptionFunc func(*ServerOptions)
+
+func WithQueue(queue faasv.Queue) ServerOptionFunc {
+	return func(options *ServerOptions) {
+		options.queue = queue
+	}
+}
+
+func WithPort(addr string) ServerOptionFunc {
+	return func(options *ServerOptions) {
+		options.addr = addr
+	}
+}
+
+func WithContext(ctx context.Context) ServerOptionFunc {
+	return func(options *ServerOptions) {
+		options.ctx = ctx
+	}
+}
+
+func WithMiddleware(middleware ...func(http.Handler) http.Handler) ServerOptionFunc {
+	return func(options *ServerOptions) {
+		options.middleware = middleware
+	}
+}
+
+type GatewayServer struct {
+	ServerOptions
 }
 
 func (server *GatewayServer) AddMiddleware(middleware ...func(http.Handler) http.Handler) {
@@ -122,17 +153,27 @@ func (g *GatewayServer) handler() http.Handler {
 	})
 }
 
-func NewGatewayServer(ctx context.Context, queue faasv.Queue, addr string) *GatewayServer {
-	httpServer := &http.Server{
-		Addr: addr,
+func NewGatewayServer(opts ...ServerOptionFunc) *GatewayServer {
+	ctx := context.Background()
+	serverOptions := &ServerOptions{
+		queue:      nil,
+		ctx:        ctx,
+		middleware: []func(http.Handler) http.Handler{},
+	}
+
+	for _, opt := range opts {
+		opt(serverOptions)
+	}
+
+	serverOptions.httpServer = &http.Server{
+		Addr: serverOptions.addr,
 		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
+			return serverOptions.ctx
 		},
 	}
+
 	return &GatewayServer{
-		queue:      queue,
-		httpServer: httpServer,
-		ctx:        ctx,
+		ServerOptions: *serverOptions,
 	}
 }
 
@@ -145,9 +186,9 @@ func (server *GatewayServer) Url() string {
 	return server.httpServer.Addr
 }
 
-func (server *GatewayServer) Stop(d time.Duration) error {
+func (server *GatewayServer) Stop(timeout time.Duration) error {
 	log.Info().Msgf("Stopping gateway server %s", server.httpServer.Addr)
-	ctx, cancel := context.WithTimeout(server.ctx, d)
+	ctx, cancel := context.WithTimeout(server.ctx, timeout)
 	defer cancel()
 	if err := server.httpServer.Shutdown(ctx); err != nil {
 		return err

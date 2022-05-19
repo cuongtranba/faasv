@@ -44,7 +44,8 @@ func main() {
 		return query.Query, nil
 	})
 
-	srv := server.NewGatewayServer(ctx, natqueue, ":8001")
+	srv := server.NewGatewayServer(server.WithContext(ctx), server.WithQueue(natqueue), server.WithPort(":8001"))
+
 	stopCh := make(chan os.Signal, 1)
 	signal.Notify(stopCh, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
